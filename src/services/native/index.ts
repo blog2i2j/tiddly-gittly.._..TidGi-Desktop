@@ -1,4 +1,4 @@
-import { app, dialog, globalShortcut, ipcMain, MessageBoxOptions, shell } from 'electron';
+import { app, dialog, globalShortcut, ipcMain, MessageBoxOptions, shell, webContents } from 'electron';
 import fs from 'fs-extra';
 import { inject, injectable } from 'inversify';
 import path from 'path';
@@ -24,6 +24,7 @@ import { ZxNotInitializedError } from './error';
 import { findEditorOrDefault, findGitGUIAppOrDefault, launchExternalEditor } from './externalApp';
 import type { INativeService, IPickDirectoryOptions } from './interface';
 import { getShortcutCallback, registerShortcutByKey } from './keyboardShortcutHelpers';
+import type { IProcessInfo } from './processInfo';
 import { reportErrorToGithubWithTemplates } from './reportError';
 
 @injectable()
@@ -177,7 +178,10 @@ export class NativeService implements INativeService {
       if (showItemInFolder) {
         shell.showItemInFolder(filePath);
       } else {
-        await shell.openPath(filePath);
+        const error = await shell.openPath(filePath);
+        if (error) {
+          throw new Error(error);
+        }
       }
     } else {
       const workspaceService = container.get<IWorkspaceService>(serviceIdentifier.Workspace);
@@ -187,7 +191,10 @@ export class NativeService implements INativeService {
         if (showItemInFolder) {
           shell.showItemInFolder(absolutePath);
         } else {
-          await shell.openPath(absolutePath);
+          const error = await shell.openPath(absolutePath);
+          if (error) {
+            throw new Error(error);
+          }
         }
       }
     }
@@ -494,5 +501,69 @@ ${message.message}
   public async logFor(label: string, level: 'error' | 'warn' | 'info' | 'debug', message: string, meta?: Record<string, unknown>): Promise<void> {
     const labeledLogger = getLoggerForLabel(label);
     labeledLogger.log(level, message, meta);
+  }
+
+  public async getProcessInfo(): Promise<IProcessInfo> {
+    const mem = process.memoryUsage();
+    const toMB = (bytes: number): number => Math.round(bytes / 1024 / 1024);
+    // app.getAppMetrics() is synchronous and covers ALL Electron processes keyed by PID
+    const metricsMap = new Map<number, Electron.ProcessMetric>();
+    for (const metric of app.getAppMetrics()) {
+      metricsMap.set(metric.pid, metric);
+    }
+    const renderers = webContents.getAllWebContents()
+      .filter((c: Electron.WebContents) => !c.isDestroyed())
+      .map((c: Electron.WebContents) => {
+        const pid = c.getOSProcessId();
+        const metric = metricsMap.get(pid);
+        return {
+          pid,
+          title: c.getTitle().slice(0, 80),
+          type: c.getType(),
+          url: c.getURL().slice(0, 120),
+          isDestroyed: c.isDestroyed(),
+          private_KB: metric?.memory.privateBytes ?? -1,
+          workingSet_KB: metric?.memory.workingSetSize ?? -1,
+          cpu_percent: metric?.cpu.percentCPUUsage ?? -1,
+        };
+      });
+    return {
+      mainNode: {
+        pid: process.pid,
+        title: process.title,
+        rss_MB: toMB(mem.rss),
+        heapUsed_MB: toMB(mem.heapUsed),
+        heapTotal_MB: toMB(mem.heapTotal),
+        external_MB: toMB(mem.external),
+      },
+      renderers,
+    };
+  }
+
+  public startProcessMonitoring(): void {
+    logger.info('Process map (match PID in task manager Details tab)', {
+      mainNodePID: process.pid,
+      processTitle: process.title,
+    });
+    setInterval(async () => {
+      const info = await this.getProcessInfo();
+      logger.debug('Memory snapshot - main Node process', {
+        pid: info.mainNode.pid,
+        rss_MB: info.mainNode.rss_MB,
+        heapUsed_MB: info.mainNode.heapUsed_MB,
+        heapTotal_MB: info.mainNode.heapTotal_MB,
+        external_MB: info.mainNode.external_MB,
+      });
+      for (const renderer of info.renderers) {
+        logger.debug('Memory snapshot - renderer', {
+          pid: renderer.pid,
+          title: renderer.title,
+          type: renderer.type,
+          private_MB: renderer.private_KB > 0 ? Math.round(renderer.private_KB / 1024) : -1,
+          workingSet_MB: renderer.workingSet_KB > 0 ? Math.round(renderer.workingSet_KB / 1024) : -1,
+          cpu_percent: renderer.cpu_percent,
+        });
+      }
+    }, 30_000);
   }
 }

@@ -59,6 +59,8 @@ export const syncableConfigFields = [
   'fileSystemPathFilter',
   'rootTiddler',
   'https',
+  'isSubWiki',
+  'mainWikiID',
 ] as const;
 
 /**
@@ -97,6 +99,8 @@ export const syncableConfigDefaultValues = {
   fileSystemPathFilter: null as string | null,
   rootTiddler: undefined as string | undefined,
   https: undefined as { enabled: boolean; tlsCert?: string; tlsKey?: string } | undefined,
+  isSubWiki: false,
+  mainWikiID: null as string | null,
 } as const;
 
 /**
@@ -127,6 +131,8 @@ export type ISyncableWikiConfig = {
   fileSystemPathFilter: string | null;
   rootTiddler?: string;
   https?: { enabled: boolean; tlsCert?: string; tlsKey?: string };
+  isSubWiki: boolean;
+  mainWikiID: string | null;
 };
 
 /**

@@ -1,4 +1,4 @@
-import { IAskAIWithSelectionData, WikiChannel } from '@/constants/channels';
+import { IAskAIWithSelectionData } from '@/constants/channels';
 import { getDefaultHTTPServerIP } from '@/constants/urls';
 import type { IAgentDefinitionService } from '@services/agentDefinition/interface';
 import type { IAuthenticationService } from '@services/auth/interface';
@@ -32,7 +32,7 @@ interface IWorkspaceMenuRequiredServices {
   native: Pick<INativeService, 'log' | 'openURI' | 'openPath' | 'openInEditor' | 'openInGitGuiApp' | 'getLocalHostUrlWithActualInfo'>;
   preference: Pick<IPreferenceService, 'getPreferences'>;
   sync: Pick<ISyncService, 'syncWikiIfNeeded'>;
-  view: Pick<IViewService, 'reloadViewsWebContents' | 'getViewCurrentUrl'>;
+  view: Pick<IViewService, 'reloadViewsWebContents' | 'getViewCurrentUrl' | 'canGoBackInView' | 'canGoForwardInView' | 'goBackInView' | 'goForwardInView'>;
   wiki: Pick<IWikiService, 'wikiOperationInBrowser' | 'wikiOperationInServer'>;
   wikiGitWorkspace: Pick<IWikiGitWorkspaceService, 'removeWorkspace'>;
   window: Pick<IWindowService, 'open' | 'get'>;
@@ -71,7 +71,7 @@ export async function getSimplifiedWorkspaceMenuTemplate(
     return [];
   }
 
-  const { id, storageService, isSubWiki } = workspace;
+  const { id, storageService, gitUrl } = workspace;
   const template: MenuItemConstructorOptions[] = [];
 
   const lastUrl = await service.view.getViewCurrentUrl(id, WindowNames.main);
@@ -96,30 +96,6 @@ export async function getSimplifiedWorkspaceMenuTemplate(
       submenu: fullMenuTemplate,
     });
   }
-  // Restart and Reload (only for non-sub wikis)
-  if (!isSubWiki) {
-    template.push(
-      {
-        label: t('ContextMenu.RestartService'),
-        click: async () => {
-          await service.workspaceView.restartWorkspaceViewService(id);
-          await service.workspaceView.realignActiveWorkspace(id);
-        },
-      },
-      {
-        label: t('ContextMenu.Reload'),
-        click: async () => {
-          await service.view.reloadViewsWebContents(id);
-        },
-      },
-      {
-        label: t('ContextMenu.OpenCommandPalette'),
-        click: async () => {
-          await service.wiki.wikiOperationInBrowser(WikiChannel.dispatchEvent, id, ['open-command-palette']);
-        },
-      },
-    );
-  }
   // Edit workspace
   template.push({
     label: t('WorkspaceSelector.EditWorkspace'),
@@ -128,14 +104,29 @@ export async function getSimplifiedWorkspaceMenuTemplate(
     },
   });
 
-  // Check if AI-generated backup title is enabled
+  // View git history (always visible for wiki workspaces)
+  template.push({
+    label: t('WorkspaceSelector.ViewGitHistory'),
+    click: async () => {
+      await service.window.open(WindowNames.gitHistory, { workspaceID: id }, { recreate: true });
+    },
+  });
+
   const aiGenerateBackupTitleEnabled = await service.git.isAIGenerateBackupTitleEnabled();
 
-  // Backup/Sync options (based on storage service)
-  if (storageService === SupportedStorageServices.local) {
-    const backupItems = createBackupMenuItems(workspace, t, service.window, service.sync, aiGenerateBackupTitleEnabled, false);
-    template.push(...backupItems);
+  // Sync items for cloud workspaces
+  if (storageService !== SupportedStorageServices.local && gitUrl) {
+    const userInfo = await service.auth.getStorageServiceUserInfo(storageService);
+    if (userInfo !== undefined) {
+      const isOnline = await service.context.isOnline();
+      const syncItems = createSyncMenuItems(workspace, t, service.sync, aiGenerateBackupTitleEnabled, isOnline, false);
+      template.push(...syncItems);
+    }
   }
+
+  // Local backup option (always shown for all wiki workspaces)
+  const backupItems = createBackupMenuItems(workspace, t, service.sync, aiGenerateBackupTitleEnabled, false);
+  template.push(...backupItems);
 
   return template;
 }
@@ -225,20 +216,19 @@ export async function getWorkspaceMenuTemplate(
   // Check if AI-generated backup title is enabled
   const aiGenerateBackupTitleEnabled = await service.git.isAIGenerateBackupTitleEnabled();
 
+  // For cloud workspaces with a configured git remote: add sync items
   if (gitUrl !== null && gitUrl.length > 0 && storageService !== SupportedStorageServices.local) {
     const userInfo = await service.auth.getStorageServiceUserInfo(storageService);
     if (userInfo !== undefined) {
       const isOnline = await service.context.isOnline();
-
       const syncItems = createSyncMenuItems(workspace, t, service.sync, aiGenerateBackupTitleEnabled, isOnline, false);
       template.push(...syncItems);
     }
   }
 
-  if (storageService === SupportedStorageServices.local) {
-    const backupItems = createBackupMenuItems(workspace, t, service.window, service.sync, aiGenerateBackupTitleEnabled, false);
-    template.push(...backupItems);
-  }
+  // Local backup is always shown for all wiki workspaces
+  const backupItems = createBackupMenuItems(workspace, t, service.sync, aiGenerateBackupTitleEnabled, false);
+  template.push(...backupItems);
 
   if (!isSubWiki) {
     template.push(
@@ -271,6 +261,28 @@ export async function getWorkspaceMenuTemplate(
       },
     });
   }
+
+  const [canGoBack, canGoForward] = await Promise.all([
+    service.view.canGoBackInView(id, WindowNames.main),
+    service.view.canGoForwardInView(id, WindowNames.main),
+  ]);
+  template.push(
+    { type: 'separator' },
+    {
+      label: t('ContextMenu.Back'),
+      enabled: canGoBack,
+      click: () => {
+        void service.view.goBackInView(id, WindowNames.main);
+      },
+    },
+    {
+      label: t('ContextMenu.Forward'),
+      enabled: canGoForward,
+      click: () => {
+        void service.view.goForwardInView(id, WindowNames.main);
+      },
+    },
+  );
 
   return template;
 }

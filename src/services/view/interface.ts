@@ -14,6 +14,17 @@ export type INewWindowAction =
     overrideBrowserWindowOptions?: Electron.BrowserWindowConstructorOptions | undefined;
   };
 
+export interface IViewInfo {
+  workspaceID: string;
+  workspaceName: string;
+  windowName: WindowNames;
+  bounds: { x: number; y: number; width: number; height: number };
+  url: string;
+  isDestroyed: boolean;
+  /** Chromium renderer process ID, used to correlate with OS process list and memory info. */
+  pid: number;
+}
+
 /**
  * Minimal mechanism-layer API for managing WebContentsView instances.
  * All policy decisions (which workspace to show, when to hide/restore, mini-window routing)
@@ -83,6 +94,14 @@ export interface IViewService {
 
   // ── Convenience / Query ───────────────────────────────────
   getViewCurrentUrl(workspaceID: string, windowName: WindowNames): Promise<string | undefined>;
+  canGoBackInView(workspaceID: string, windowName: WindowNames): Promise<boolean>;
+  canGoForwardInView(workspaceID: string, windowName: WindowNames): Promise<boolean>;
+  goBackInView(workspaceID: string, windowName: WindowNames): Promise<void>;
+  goForwardInView(workspaceID: string, windowName: WindowNames): Promise<void>;
+  /** Return debug information about every registered view (bounds, URL, memory, etc). */
+  getViewsInfo(): Promise<IViewInfo[]>;
+  /** Open Electron DevTools for a specific view's webContents. */
+  openDevToolsForView(workspaceID: string, windowName: WindowNames): void;
   setViewsAudioPref(shouldMuteAudio?: boolean): void;
   setViewsNotificationsPref(shouldPauseNotifications?: boolean): void;
 }
@@ -96,6 +115,12 @@ export const ViewServiceIPCDescriptor = {
     getView: ProxyPropertyType.Function,
     getViewCount: ProxyPropertyType.Function,
     getViewCurrentUrl: ProxyPropertyType.Function,
+    canGoBackInView: ProxyPropertyType.Function,
+    canGoForwardInView: ProxyPropertyType.Function,
+    goBackInView: ProxyPropertyType.Function,
+    goForwardInView: ProxyPropertyType.Function,
+    getViewsInfo: ProxyPropertyType.Function,
+    openDevToolsForView: ProxyPropertyType.Function,
     showView: ProxyPropertyType.Function,
     hideView: ProxyPropertyType.Function,
     setViewBounds: ProxyPropertyType.Function,

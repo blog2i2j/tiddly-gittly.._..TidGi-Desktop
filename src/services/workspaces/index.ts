@@ -2,7 +2,7 @@ import { app } from 'electron';
 import fsExtra from 'fs-extra';
 import { injectable } from 'inversify';
 import { Jimp } from 'jimp';
-import { mapValues, pickBy } from 'lodash';
+import { isEqual, mapValues, pickBy } from 'lodash';
 import { nanoid } from 'nanoid';
 import path from 'path';
 import { BehaviorSubject, Observable } from 'rxjs';
@@ -15,13 +15,10 @@ import { getDefaultTidGiUrl } from '@/constants/urls';
 import type { IAuthenticationService } from '@services/auth/interface';
 import { container } from '@services/container';
 import type { IDatabaseService } from '@services/database/interface';
-import { i18n } from '@services/libs/i18n';
 import { logger } from '@services/libs/log';
 import type { IMenuService } from '@services/menu/interface';
 import serviceIdentifier from '@services/serviceIdentifier';
-import type { IViewService } from '@services/view/interface';
 import type { IWikiService } from '@services/wiki/interface';
-import { WindowNames } from '@services/windows/WindowProperties';
 import type { IWorkspaceViewService } from '@services/workspacesView/interface';
 import { extractSyncableConfig, mergeWithSyncedConfig, readTidgiConfig, readTidgiConfigSync, removeSyncableFields, writeTidgiConfig } from '../database/configSetting';
 import type {
@@ -36,6 +33,7 @@ import type {
 } from './interface';
 import { isWikiWorkspace, wikiWorkspaceDefaultValues } from './interface';
 import { registerMenu } from './registerMenu';
+import { syncableConfigFields } from './syncableConfig';
 import { workspaceSorter } from './utilities';
 
 @injectable()
@@ -84,17 +82,6 @@ export class Workspace implements IWorkspaceService {
           await menuService.buildMenu();
         },
         accelerator: `CmdOrCtrl+${index + 1}`,
-      },
-      {
-        label: () => `${workspace.name || `Workspace ${index + 1}`} ${i18n.t('Menu.DeveloperToolsActiveWorkspace')}`,
-        id: `${workspace.id}-devtool`,
-        click: async () => {
-          const viewService = container.get<IViewService>(serviceIdentifier.View);
-          const view = viewService.getView(workspace.id, WindowNames.main);
-          if (view !== undefined) {
-            view.webContents.toggleDevTools();
-          }
-        },
       },
     ]);
 
@@ -225,17 +212,34 @@ export class Workspace implements IWorkspaceService {
     // Update memory cache with full workspace data (including syncable fields)
     workspaces[id] = workspaceToSave;
 
-    // Write syncable config to tidgi.config.json ONLY for the workspace being modified
-    // This avoids redundant writes to all workspaces on every single update
+    // Write tidgi.config.json only when syncable fields actually changed.
+    // Compare against the ACTUAL FILE content (not just in-memory), so that when a field is newly
+    // added to syncableConfigFields (e.g. isSubWiki, mainWikiToLink) but the existing file predates
+    // that addition, the file gets updated on the next save rather than only on an explicit change.
     if (isWikiWorkspace(workspaceToSave)) {
-      try {
-        const syncableConfig = extractSyncableConfig(workspaceToSave);
-        await writeTidgiConfig(workspaceToSave.wikiFolderLocation, syncableConfig);
-      } catch (error) {
-        logger.warn('Failed to write tidgi.config.json', {
-          workspaceId: id,
-          error: (error as Error).message,
-        });
+      const newSyncableConfig = extractSyncableConfig(workspaceToSave);
+      const existingFileConfig = readTidgiConfigSync(workspaceToSave.wikiFolderLocation);
+      // existingFileConfig is undefined when the file doesn't exist → always write on first save.
+      // When the file exists, compare its content against what we'd write to detect migration gaps.
+      const fileConfigForComparison = existingFileConfig ?? {};
+      const syncableChanged = existingFileConfig === undefined ||
+        syncableConfigFields.some((field) =>
+          // treat a missing key (e.g. newly added field) as changed so the file gets updated
+          !Object.prototype.hasOwnProperty.call(fileConfigForComparison, field) ||
+          !isEqual(
+            (newSyncableConfig as Record<string, unknown>)[field],
+            (fileConfigForComparison as Record<string, unknown>)[field],
+          )
+        );
+      if (syncableChanged) {
+        try {
+          await writeTidgiConfig(workspaceToSave.wikiFolderLocation, newSyncableConfig);
+        } catch (error) {
+          logger.warn('Failed to write tidgi.config.json', {
+            workspaceId: id,
+            error: (error as Error).message,
+          });
+        }
       }
     }
 

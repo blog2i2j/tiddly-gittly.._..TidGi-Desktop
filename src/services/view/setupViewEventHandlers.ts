@@ -54,6 +54,12 @@ export default function setupViewEventHandlers(
   const preferenceService = container.get<IPreferenceService>(serviceIdentifier.Preference);
 
   handleViewFileContentLoading(view);
+  logger.info('Wiki view created', {
+    workspaceID: workspace.id,
+    workspaceName: workspace.name,
+    windowName,
+    rendererPID: view.webContents.getOSProcessId(),
+  });
   view.webContents.on('did-start-loading', async () => {
     const workspaceObject = await workspaceService.get(workspace.id);
     // this event might be triggered
@@ -115,7 +121,9 @@ export default function setupViewEventHandlers(
     if (await workspaceService.workspaceDidFailLoad(workspace.id)) {
       return;
     }
-    if (view.webContents === null) {
+    // After webContents.close() the getter can return undefined (not null) in Electron.
+
+    if (view.webContents == null || view.webContents.isDestroyed()) {
       return;
     }
     logger.debug('set isLoading to false', {
@@ -167,6 +175,8 @@ export default function setupViewEventHandlers(
     if (workspaceDidFailLoad) {
       return;
     }
+
+    if (view.webContents == null || view.webContents.isDestroyed()) return;
     if (isMainFrame && errorCode < 0 && errorCode !== -3) {
       // Fix nodejs wiki start slow on system startup, which cause `-102 ERR_CONNECTION_REFUSED` even if wiki said it is booted, we have to retry several times
       if (errorCode === -102 && view.webContents.getURL().length > 0 && isWikiWorkspace(workspaceObject) && workspaceObject.homeUrl.startsWith('http')) {
@@ -201,6 +211,8 @@ export default function setupViewEventHandlers(
     if (workspaceObject === undefined) {
       return;
     }
+
+    if (view.webContents == null || view.webContents.isDestroyed()) return;
     if (workspaceObject.active) {
       await windowService.sendToAllWindows(WindowChannel.updateCanGoBack, view.webContents.navigationHistory.canGoBack());
       await windowService.sendToAllWindows(WindowChannel.updateCanGoForward, view.webContents.navigationHistory.canGoForward());
@@ -216,6 +228,8 @@ export default function setupViewEventHandlers(
     if (workspaceObject === undefined) {
       return;
     }
+
+    if (view.webContents == null || view.webContents.isDestroyed()) return;
     if (workspaceObject.active) {
       await windowService.sendToAllWindows(WindowChannel.updateCanGoBack, view.webContents.navigationHistory.canGoBack());
       await windowService.sendToAllWindows(WindowChannel.updateCanGoForward, view.webContents.navigationHistory.canGoForward());

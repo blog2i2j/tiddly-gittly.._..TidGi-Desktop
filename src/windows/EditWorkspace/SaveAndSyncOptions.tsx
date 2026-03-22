@@ -13,12 +13,11 @@ import { OptionsAccordion, OptionsAccordionSummary, TextField } from './styles';
 interface SaveAndSyncOptionsProps {
   workspace: IWorkspace;
   workspaceSetter: (newValue: IWorkspace, requestSaveAndRestart?: boolean) => void;
-  rememberLastPageVisited: boolean | undefined;
 }
 
 export function SaveAndSyncOptions(props: SaveAndSyncOptionsProps): React.JSX.Element {
   const { t } = useTranslation();
-  const { workspace, workspaceSetter, rememberLastPageVisited: _rememberLastPageVisited } = props;
+  const { workspace, workspaceSetter } = props;
 
   const isWiki = isWikiWorkspace(workspace);
   const {
@@ -47,9 +46,21 @@ export function SaveAndSyncOptions(props: SaveAndSyncOptionsProps): React.JSX.El
 
   const fallbackUserName = '';
   const isCreateSyncedWorkspace = storageService !== SupportedStorageServices.local;
+  const [expanded, setExpanded] = React.useState(() => isCreateSyncedWorkspace || Boolean(gitUrl));
+
+  React.useEffect(() => {
+    if (isCreateSyncedWorkspace || Boolean(gitUrl)) {
+      setExpanded(true);
+    }
+  }, [gitUrl, isCreateSyncedWorkspace]);
 
   return (
-    <OptionsAccordion>
+    <OptionsAccordion
+      expanded={expanded}
+      onChange={(_event, isExpanded) => {
+        setExpanded(isExpanded);
+      }}
+    >
       <Tooltip title={t('EditWorkspace.ClickToExpand')}>
         <OptionsAccordionSummary expandIcon={<ExpandMoreIcon />} data-testid='preference-section-saveAndSyncOptions'>
           {t('EditWorkspace.SaveAndSyncOptions')}
@@ -92,16 +103,6 @@ export function SaveAndSyncOptions(props: SaveAndSyncOptionsProps): React.JSX.El
             {t('EditWorkspace.MoveWorkspace')}
           </Button>
         </Tooltip>
-        {isSubWiki && workspace && isWikiWorkspace(workspace) && workspace.mainWikiToLink && (
-          <TextField
-            fullWidth
-            id='outlined-full-width'
-            label={t('EditWorkspace.MainWorkspacePath')}
-            helperText={t('EditWorkspace.PathDescription')}
-            value={workspace.mainWikiToLink}
-            disabled
-          />
-        )}
         {!isSubWiki && (
           <TextField
             helperText={t('AddWorkspace.WorkspaceUserNameDetail')}

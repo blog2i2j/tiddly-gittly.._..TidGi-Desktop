@@ -155,6 +155,16 @@
       },
       "required": ["enabled"],
       "additionalProperties": false
+    },
+    "isSubWiki": {
+      "type": "boolean",
+      "description": "Whether this wiki is a sub-wiki attached to a main wiki",
+      "default": false
+    },
+    "mainWikiID": {
+      "type": ["string", "null"],
+      "description": "Canonical workspace ID of the main wiki this sub-wiki is attached to",
+      "default": null
     }
   },
   "required": ["version"],

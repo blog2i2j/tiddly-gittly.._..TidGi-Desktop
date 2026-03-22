@@ -428,6 +428,45 @@ export class View implements IViewService {
     return this.getView(workspaceID, windowName)?.webContents.getURL();
   }
 
+  public async canGoBackInView(workspaceID: string, windowName: WindowNames): Promise<boolean> {
+    return this.getView(workspaceID, windowName)?.webContents.navigationHistory.canGoBack() ?? false;
+  }
+
+  public async canGoForwardInView(workspaceID: string, windowName: WindowNames): Promise<boolean> {
+    return this.getView(workspaceID, windowName)?.webContents.navigationHistory.canGoForward() ?? false;
+  }
+
+  public async goBackInView(workspaceID: string, windowName: WindowNames): Promise<void> {
+    this.getView(workspaceID, windowName)?.webContents.navigationHistory.goBack();
+  }
+
+  public async goForwardInView(workspaceID: string, windowName: WindowNames): Promise<void> {
+    this.getView(workspaceID, windowName)?.webContents.navigationHistory.goForward();
+  }
+
+  public async getViewsInfo(): Promise<import('./interface').IViewInfo[]> {
+    const results = [];
+    for (const [workspaceID, windowViews] of this.views.entries()) {
+      const workspace = await this.workspaceService.get(workspaceID);
+      const workspaceName = workspace?.name ?? workspaceID;
+      for (const [windowName, view] of windowViews.entries()) {
+        const destroyed = view.webContents.isDestroyed();
+        const bounds = view.getBounds();
+        const url = destroyed ? '' : view.webContents.getURL();
+        const pid = destroyed ? -1 : view.webContents.getOSProcessId();
+        results.push({ workspaceID, workspaceName, windowName, bounds, url, isDestroyed: destroyed, pid });
+      }
+    }
+    return results;
+  }
+
+  public openDevToolsForView(workspaceID: string, windowName: WindowNames): void {
+    const view = this.getView(workspaceID, windowName);
+    if (view !== undefined && !view.webContents.isDestroyed()) {
+      view.webContents.openDevTools();
+    }
+  }
+
   public setViewsAudioPref = (shouldMuteAudio?: boolean): void => {
     if (shouldMuteAudio !== undefined) this.shouldMuteAudio = shouldMuteAudio;
     this.forEachView(async (view, id) => {
