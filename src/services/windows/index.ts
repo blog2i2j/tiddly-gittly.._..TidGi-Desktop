@@ -250,8 +250,10 @@ export class Window implements IWindowService {
         webSecurity: false,
         allowRunningInsecureContent: true,
         contextIsolation: true,
-        // Prevent JS from being throttled while the window is hidden during E2E tests
-        ...(isTest ? { backgroundThrottling: false } : {}),
+        // Keep callbacks active only for windows that host wiki BrowserViews.
+        ...([WindowNames.main, WindowNames.secondary, WindowNames.tidgiMiniWindow].includes(windowName)
+          ? { backgroundThrottling: false }
+          : {}),
         preload: getPreloadPath(),
         additionalArguments: [
           `${MetaDataChannel.browserViewMetaData}${windowName}`,
