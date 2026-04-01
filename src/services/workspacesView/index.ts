@@ -413,8 +413,12 @@ export class WorkspaceView implements IWorkspaceViewService {
     }
 
     try {
+      // showWorkspaceView calls showView() which sets correct bounds via getViewBounds.
+      // A separate realignActiveWorkspace() would call realignView() immediately after,
+      // duplicating setBounds and — before the refactor — also duplicating remove+add which
+      // would clobber the focus() set by showView().  Rebuild the menu here instead.
       await this.showWorkspaceView(nextWorkspaceID);
-      await this.realignActiveWorkspace(nextWorkspaceID);
+      await container.get<IMenuService>(serviceIdentifier.MenuService).buildMenu();
     } catch (error) {
       logger.error('setActiveWorkspaceView error', {
         function: 'setActiveWorkspaceView',
@@ -612,8 +616,35 @@ export class WorkspaceView implements IWorkspaceViewService {
   }
 
   /**
-   * Seems this is for relocating WebContentsView in the electron window
+   * Force-show the active workspace view and rebuild the menu.  Called when a window
+   * transitions from hidden/background to visible so the Chromium compositor is guaranteed
+   * to paint the WebContentsView.
+   *
+   * Intentionally does NOT call `realignActiveWorkspace()` afterwards:
+   * `showWorkspaceView` → `showView` already sets the correct bounds via `getViewBounds`.
+   * A subsequent `realignView` would duplicate setBounds and run after `showView`'s
+   * `webContents.focus()`, potentially interfering with focus state.
    */
+  public async refreshActiveWorkspaceView(): Promise<void> {
+    logger.info('[test-id-REFRESH_ACTIVE_VIEW_START]');
+    const workspaceService = container.get<IWorkspaceService>(serviceIdentifier.Workspace);
+    const activeWorkspace = await workspaceService.getActiveWorkspace();
+    if (activeWorkspace !== undefined) {
+      await this.showWorkspaceView(activeWorkspace.id);
+    }
+    try {
+      await container.get<IMenuService>(serviceIdentifier.MenuService).buildMenu();
+    } catch (error) {
+      // Log but don't rethrow — this is called from the 'show' window event handler
+      // (fire-and-forget context) so a rethrow would produce an unhandled rejection.
+      logger.error('refreshActiveWorkspaceView buildMenu error', {
+        function: 'refreshActiveWorkspaceView',
+        error,
+      });
+    }
+    logger.info('[test-id-REFRESH_ACTIVE_VIEW_DONE]');
+  }
+
   public async realignActiveWorkspace(id?: string): Promise<void> {
     // this function only call browserView.setBounds
     // do not attempt to recall browserView.webContents.focus()

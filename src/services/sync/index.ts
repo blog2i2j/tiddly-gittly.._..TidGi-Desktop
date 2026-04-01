@@ -29,6 +29,7 @@ export class Sync implements ISyncService {
       logger.warn('syncWikiIfNeeded called on non-wiki workspace', { workspaceId: workspace.id });
       return;
     }
+    logger.info('syncWikiIfNeeded started', { workspaceId: workspace.id, storageService: workspace.storageService, force: options?.force });
 
     // Get Layer 3 services
     const wikiService = container.get<IWikiService>(serviceIdentifier.Wiki);
@@ -51,8 +52,10 @@ export class Sync implements ISyncService {
       return;
     }
     const idToUse = isSubWiki ? mainWorkspace!.id : id;
+    const { force = false } = options ?? {};
     // we can only run filter on main wiki (tw don't know what is sub-wiki)
-    if (syncOnlyWhenNoDraft && !(await this.checkCanSyncDueToNoDraft(idToUse))) {
+    // Skip draft check when user explicitly triggers sync (force=true), or when syncOnlyWhenNoDraft is disabled.
+    if (!force && syncOnlyWhenNoDraft && !(await this.checkCanSyncDueToNoDraft(idToUse))) {
       await wikiService.wikiOperationInBrowser(WikiChannel.generalNotification, idToUse, [i18n.t('Preference.SyncOnlyWhenNoDraft')]);
       return;
     }
@@ -63,6 +66,7 @@ export class Sync implements ISyncService {
       typeof gitUrl === 'string' &&
       userInfo !== undefined
     ) {
+      // cloud workspace with valid auth: full sync
       const syncOrForcePullConfigs = { remoteUrl: gitUrl, userInfo, dir: wikiFolderLocation, commitMessage } satisfies ICommitAndSyncConfigs;
       // sync current workspace first
       const hasChanges = await gitService.syncOrForcePull(workspace, syncOrForcePullConfigs);
@@ -73,8 +77,8 @@ export class Sync implements ISyncService {
           await workspaceViewService.restartWorkspaceViewService(idToUse);
           await viewService.reloadViewsWebContents(idToUse);
         }
-      } else {
-        // sync all sub workspace
+      } else if (workspace.syncSubWikis !== false) {
+        // sync all sub workspace (can be disabled via syncSubWikis setting)
         const subWorkspaces = await workspaceService.getSubWorkspacesAsList(id);
         const subHasChangesPromise = subWorkspaces.map(async (subWorkspace) => {
           if (!isWikiWorkspace(subWorkspace)) return false;
@@ -98,16 +102,34 @@ export class Sync implements ISyncService {
           await viewService.reloadViewsWebContents(id);
         }
       }
+    } else {
+      // cloud workspace but missing gitUrl or userInfo - log and notify instead of silently doing nothing
+      const reason = typeof gitUrl !== 'string' ? 'missing gitUrl' : 'missing userInfo (not authenticated)';
+      logger.warn('syncWikiIfNeeded skipped for cloud workspace', { workspaceId: id, reason });
+      await wikiService.wikiOperationInBrowser(WikiChannel.generalNotification, idToUse, [
+        `${i18n.t('Log.SynchronizationFailed')} (${reason})`,
+      ]);
     }
   }
 
   public async checkCanSyncDueToNoDraft(workspaceID: string): Promise<boolean> {
     try {
       const wikiService = container.get<IWikiService>(serviceIdentifier.Wiki);
-      const draftTitles = (await Promise.all([
+      // Add timeout so the sync flow doesn't hang forever when the wiki browser view is unresponsive
+      const DRAFT_CHECK_TIMEOUT_MS = 5000;
+      const draftCheckPromise = Promise.all([
         wikiService.wikiOperationInServer(WikiChannel.runFilter, workspaceID, ['[all[]is[draft]]']),
         wikiService.wikiOperationInBrowser(WikiChannel.runFilter, workspaceID, ['[list[$:/StoryList]has:field[wysiwyg]]']),
-      ])).flat();
+      ]);
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error('checkCanSyncDueToNoDraft timed out'));
+        }, DRAFT_CHECK_TIMEOUT_MS);
+      });
+      const draftTitles = (await Promise.race([draftCheckPromise, timeoutPromise]).finally(() => {
+        clearTimeout(timeoutHandle);
+      })).flat();
 
       if (Array.isArray(draftTitles) && draftTitles.length > 0) {
         return false;

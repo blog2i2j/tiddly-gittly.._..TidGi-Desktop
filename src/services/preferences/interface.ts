@@ -4,30 +4,27 @@ import { PreferenceChannel } from '@/constants/channels';
 import type { HunspellLanguages } from '@/constants/hunspellLanguages';
 import type { BehaviorSubject } from 'rxjs';
 
+/**
+ * All user-configurable preferences.
+ * This is the single source of truth for the TypeScript type.
+ * The Zod schema in definitions/registry.ts validates against this at runtime.
+ */
 export interface IPreferences {
+  aiGenerateBackupTitle: boolean;
+  aiGenerateBackupTitleTimeout: number;
   allowPrerelease: boolean;
   alwaysOnTop: boolean;
   askForDownloadPath: boolean;
-  tidgiMiniWindow: boolean;
-  /**
-   * 完全关闭反盗链
-   */
   disableAntiAntiLeech: boolean;
-  /**
-   * Only disable anti-leech for these urls
-   */
   disableAntiAntiLeechForUrls: string[];
   downloadPath: string;
-  /**
-   * Enable debug logging for external API requests and responses
-   */
   externalAPIDebug: boolean;
   hibernateUnusedWorkspacesAtLaunch: boolean;
   hideMenuBar: boolean;
   ignoreCertificateErrors: boolean;
+  keyboardShortcuts: Record<string, string>;
   language: string;
-  tidgiMiniWindowAlwaysOnTop: boolean;
-  pauseNotifications: string | undefined;
+  pauseNotifications?: string;
   pauseNotificationsBySchedule: boolean;
   pauseNotificationsByScheduleFrom: string;
   pauseNotificationsByScheduleTo: string;
@@ -37,48 +34,20 @@ export interface IPreferences {
   shareWorkspaceBrowsingData: boolean;
   showSideBarIcon: boolean;
   showSideBarText: boolean;
-  /**
-   * Should show sidebar on main window?
-   */
   sidebar: boolean;
-  /**
-   * Should show sidebar on tidgi mini window?
-   */
-  tidgiMiniWindowShowSidebar: boolean;
   spellcheck: boolean;
   spellcheckLanguages: HunspellLanguages[];
   swipeToNavigate: boolean;
-  /**
-   * Whether menubar window should show the same workspace as main window
-   */
-  tidgiMiniWindowSyncWorkspaceWithMainWindow: boolean;
-  /**
-   * The workspace ID that tidgi mini window should always show when tidgiMiniWindowSyncWorkspaceWithMainWindow is false
-   */
-  tidgiMiniWindowFixedWorkspaceId: string | undefined;
-  /**
-   * Whether to show title bar on tidgi mini window (independent of main window's titleBar setting)
-   */
-  tidgiMiniWindowShowTitleBar: boolean;
-  /**
-   * Keyboard shortcuts configuration stored as serviceIdentifier.methodName -> shortcut
-   */
-  keyboardShortcuts: Record<string, string>;
   syncBeforeShutdown: boolean;
   syncDebounceInterval: number;
-  /**
-   * Only start a sync when there are no draft (prevent your blog has a draft tiddler)
-   */
   syncOnlyWhenNoDraft: boolean;
-  /**
-   * Whether to use AI to generate backup/commit titles
-   */
-  aiGenerateBackupTitle: boolean;
-  /**
-   * Timeout for AI-generated backup title in milliseconds
-   */
-  aiGenerateBackupTitleTimeout: number;
   themeSource: 'system' | 'light' | 'dark';
+  tidgiMiniWindow: boolean;
+  tidgiMiniWindowAlwaysOnTop: boolean;
+  tidgiMiniWindowFixedWorkspaceId?: string;
+  tidgiMiniWindowShowSidebar: boolean;
+  tidgiMiniWindowShowTitleBar: boolean;
+  tidgiMiniWindowSyncWorkspaceWithMainWindow: boolean;
   titleBar: boolean;
   unreadCountBadge: boolean;
   useHardwareAcceleration: boolean;

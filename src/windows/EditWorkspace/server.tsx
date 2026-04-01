@@ -1,22 +1,6 @@
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
-  Autocomplete,
-  AutocompleteRenderInputParams,
-  Button,
-  Checkbox,
-  createFilterOptions,
-  Divider,
-  Link,
-  List,
-  Switch,
-  TextField,
-  Tooltip,
-} from '@mui/material';
+import { Autocomplete, AutocompleteRenderInputParams, Button, Checkbox, createFilterOptions, Divider, Link, List, Switch, TextField } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import React, { startTransition, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -29,16 +13,11 @@ import { tlsCertExtensions, tlsKeyExtensions } from '@/constants/fileNames';
 import { getDefaultHTTPServerIP } from '@/constants/urls';
 import { usePromiseValue } from '@/helpers/useServiceValue';
 import { useActualIp } from '@services/native/hooks';
-import { isWikiWorkspace, IWorkspace } from '@services/workspaces/interface';
+import type { ICustomSectionProps } from '@services/preferences/definitions/types';
+import { isWikiWorkspace } from '@services/workspaces/interface';
+import { Paper, SectionTitle } from '../Preferences/PreferenceComponents';
+import { useWorkspaceForm } from './WorkspaceFormContext';
 
-const AServerOptionsAccordion = styled(Accordion)`
-  box-shadow: unset;
-  background-color: unset;
-`;
-const AServerOptionsAccordionSummary = styled(AccordionSummary)`
-  padding: 0;
-  flex-direction: row-reverse;
-`;
 const HttpsCertKeyListItem = styled(ListItem)`
   flex-direction: row;
   align-items: flex-start;
@@ -52,15 +31,11 @@ const AuthTokenTextAndButtonContainer = styled('div')`
   flex-direction: row;
 `;
 
-export interface IServerOptionsProps {
-  workspace: IWorkspace;
-  workspaceSetter: (newValue: IWorkspace, requestSaveAndRestart?: boolean) => void;
-}
-export function ServerOptions(props: IServerOptionsProps) {
+export function ServerOptions(props: ICustomSectionProps) {
   const { t } = useTranslation();
-  const { workspace, workspaceSetter } = props;
+  const { sectionRef } = props;
+  const { workspace, workspaceSetter } = useWorkspaceForm();
 
-  const isWiki = isWikiWorkspace(workspace);
   const {
     https = { enabled: false },
     port,
@@ -72,24 +47,12 @@ export function ServerOptions(props: IServerOptionsProps) {
     authToken,
     userName,
     id,
-  } = isWiki ? workspace : {
-    https: { enabled: false },
-    port: 0,
-    rootTiddler: '',
-    lastNodeJSArgv: [],
-    enableHTTPAPI: false,
-    readOnlyMode: false,
-    tokenAuth: false,
-    authToken: '',
-    userName: '',
-    id: workspace.id,
-  };
+  } = workspace;
   const actualIP = useActualIp(getDefaultHTTPServerIP(port), id);
   // some feature need a username to work, so if userName is empty, assign a fallbackUserName DEFAULT_USER_NAME
 
   const fallbackUserName = usePromiseValue<string>(async () => (await window.service.auth.get('userName'))!, '');
   const userNameIsEmpty = !(userName || fallbackUserName);
-  const alreadyEnableSomeServerOptions = readOnlyMode;
 
   // Local string state for port: avoids re-rendering the entire form on every keystroke.
   // Workspace is only updated on blur.
@@ -102,16 +65,13 @@ export function ServerOptions(props: IServerOptionsProps) {
   }
 
   return (
-    <AServerOptionsAccordion defaultExpanded={alreadyEnableSomeServerOptions}>
-      <Tooltip title={t('EditWorkspace.ClickToExpand')}>
-        <AServerOptionsAccordionSummary expandIcon={<ExpandMoreIcon />} data-testid='preference-section-serverOptions'>
-          {t('EditWorkspace.ServerOptions')} ({t('EditWorkspace.EnableHTTPAPI')})
-        </AServerOptionsAccordionSummary>
-      </Tooltip>
-      <AccordionDetails>
-        <List>
+    <>
+      <SectionTitle ref={sectionRef} data-testid='preference-section-serverOptions'>
+        {t('EditWorkspace.ServerOptions')} ({t('EditWorkspace.EnableHTTPAPI')})
+      </SectionTitle>
+      <Paper elevation={0}>
+        <List dense disablePadding>
           <ListItem
-            disableGutters
             secondaryAction={
               <Switch
                 edge='end'
@@ -127,7 +87,7 @@ export function ServerOptions(props: IServerOptionsProps) {
             <ListItemText primary={t('EditWorkspace.EnableHTTPAPI')} secondary={t('EditWorkspace.EnableHTTPAPIDescription')} />
           </ListItem>
 
-          <ListItem disableGutters>
+          <ListItem>
             <TextField
               id='outlined-full-width'
               label={t('EditWorkspace.Port')}
@@ -176,7 +136,6 @@ export function ServerOptions(props: IServerOptionsProps) {
 
           <Divider />
           <ListItem
-            disableGutters
             secondaryAction={
               <Switch
                 edge='end'
@@ -209,7 +168,7 @@ export function ServerOptions(props: IServerOptionsProps) {
           </ListItem>
           {tokenAuth && (
             <>
-              <ListItem disableGutters>
+              <ListItem>
                 <TextField
                   id='outlined-full-width'
                   label={t('EditWorkspace.TokenAuthCurrentToken')}
@@ -234,7 +193,7 @@ export function ServerOptions(props: IServerOptionsProps) {
                   }}
                 />
               </ListItem>
-              <ListItem disableGutters>
+              <ListItem>
                 <ListItemText
                   primary={t('EditWorkspace.TokenAuthCurrentHeader')}
                   secondary={`"${getTidGiAuthHeaderWithToken(authToken ?? '')}": "${userName || fallbackUserName || ''}"`}
@@ -245,14 +204,13 @@ export function ServerOptions(props: IServerOptionsProps) {
           {Array.isArray(lastNodeJSArgv) && (
             <>
               <Divider />
-              <ListItem disableGutters>
+              <ListItem>
                 <ListItemText primary={t('EditWorkspace.LastNodeJSArgv')} secondary={`tiddlywiki ${lastNodeJSArgv.join(' ')}`} />
               </ListItem>
             </>
           )}
           <Divider />
           <ListItem
-            disableGutters
             secondaryAction={
               <Switch
                 edge='end'
@@ -267,9 +225,8 @@ export function ServerOptions(props: IServerOptionsProps) {
             <ListItemText primary={t('EditWorkspace.ReadOnlyMode')} secondary={t('EditWorkspace.ReadOnlyModeDescription')} />
           </ListItem>
 
-          {workspace !== undefined && readOnlyMode && <ExcludedPluginsAutocomplete workspace={workspace} workspaceSetter={workspaceSetter} />}
+          {workspace !== undefined && readOnlyMode && <ExcludedPluginsAutocomplete />}
           <ListItem
-            disableGutters
             secondaryAction={
               <Switch
                 edge='end'
@@ -285,7 +242,7 @@ export function ServerOptions(props: IServerOptionsProps) {
           </ListItem>
           {https.enabled && (
             <>
-              <ListItem disableGutters>
+              <ListItem>
                 <ListItemText secondary={t('EditWorkspace.UploadOrSelectPathDescription')} />
               </ListItem>
               <HttpsCertKeyListItem>
@@ -318,7 +275,7 @@ export function ServerOptions(props: IServerOptionsProps) {
                   {t('EditWorkspace.HTTPSPickCert')}
                 </Button>
               </HttpsCertKeyListItem>
-              <HttpsCertKeyListItem disableGutters>
+              <HttpsCertKeyListItem>
                 <TextField
                   id='outlined-full-width'
                   label={t('EditWorkspace.HTTPSCertPath')}
@@ -362,7 +319,7 @@ export function ServerOptions(props: IServerOptionsProps) {
                   {t('EditWorkspace.HTTPSPickKey')}
                 </Button>
               </HttpsCertKeyListItem>
-              <HttpsCertKeyListItem disableGutters>
+              <HttpsCertKeyListItem>
                 <TextField
                   id='outlined-full-width'
                   label={t('EditWorkspace.HTTPSKeyPath')}
@@ -378,33 +335,37 @@ export function ServerOptions(props: IServerOptionsProps) {
               <Divider />
             </>
           )}
+
+          <ListItem>
+            <AutocompleteWithMarginTop
+              fullWidth
+              freeSolo
+              options={rootTiddlers}
+              value={rootTiddler}
+              defaultValue={rootTiddlers[0]}
+              onInputChange={(event: React.SyntheticEvent, value: string) => {
+                void event;
+                workspaceSetter({ ...workspace, rootTiddler: value });
+                // void requestSaveAndRestart();
+              }}
+              renderInput={(parameters: AutocompleteRenderInputParams) => (
+                <TextField {...parameters} label={t('EditWorkspace.WikiRootTiddler')} helperText={t('EditWorkspace.WikiRootTiddlerDescription')} />
+              )}
+              renderOption={(props, option) => <li {...props}>{t(`EditWorkspace.WikiRootTiddlerItems.${String(option).replace('$:/core/save/', '')}`)} ({String(option)})</li>}
+            />
+          </ListItem>
         </List>
-        <AutocompleteWithMarginTop
-          freeSolo
-          options={rootTiddlers}
-          value={rootTiddler}
-          defaultValue={rootTiddlers[0]}
-          onInputChange={(event: React.SyntheticEvent, value: string) => {
-            void event;
-            workspaceSetter({ ...workspace, rootTiddler: value });
-            // void requestSaveAndRestart();
-          }}
-          renderInput={(parameters: AutocompleteRenderInputParams) => (
-            <TextField {...parameters} label={t('EditWorkspace.WikiRootTiddler')} helperText={t('EditWorkspace.WikiRootTiddlerDescription')} />
-          )}
-          renderOption={(props, option) => <li {...props}>{t(`EditWorkspace.WikiRootTiddlerItems.${String(option).replace('$:/core/save/', '')}`)} ({String(option)})</li>}
-        />
-      </AccordionDetails>
-    </AServerOptionsAccordion>
+      </Paper>
+    </>
   );
 }
 
 const autocompleteExcludedPluginsFilter = createFilterOptions<string>();
 const uncheckedIcon = <CheckBoxOutlineBlankIcon fontSize='small' />;
 const checkedIcon = <CheckBoxIcon fontSize='small' />;
-function ExcludedPluginsAutocomplete(props: { workspace: IWorkspace; workspaceSetter: (newValue: IWorkspace, requestSaveAndRestart?: boolean) => void }) {
+function ExcludedPluginsAutocomplete() {
   const { t } = useTranslation();
-  const { workspaceSetter, workspace } = props;
+  const { workspace, workspaceSetter } = useWorkspaceForm();
 
   if (!isWikiWorkspace(workspace)) {
     return null;
@@ -423,66 +384,69 @@ function ExcludedPluginsAutocomplete(props: { workspace: IWorkspace; workspaceSe
 
   return (
     <>
-      <ListItem disableGutters>
+      <ListItem>
         <ListItemText primary={t('EditWorkspace.ExcludedPlugins')} secondary={t('EditWorkspace.ExcludedPluginsDescription')} />
       </ListItem>
-      <Autocomplete
-        freeSolo
-        multiple
-        disableCloseOnSelect
-        options={pluginsInWiki}
-        value={excludedPlugins}
-        limitTags={2}
-        renderOption={(props, option, { selected }) => (
-          <li {...props}>
-            <Checkbox
-              icon={uncheckedIcon}
-              checkedIcon={checkedIcon}
-              style={{ marginRight: 8 }}
-              checked={selected}
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-                if (event.target.checked) {
-                  workspaceSetter({ ...workspace, excludedPlugins: [...excludedPlugins.filter(item => item !== option), option] }, true);
-                } else {
-                  workspaceSetter({ ...workspace, excludedPlugins: excludedPlugins.filter(item => item !== option) }, true);
-                }
-              }}
-            />
-            {option}
-          </li>
-        )}
-        slotProps={{
-          chip: {
-            onDelete: (event: Event) => {
-              // Be defensive: event.target can be null and EventTarget doesn't have DOM properties in TS.
-              const target = event.target as HTMLElement | null;
-              if (!target) return;
-              let node = target.parentNode as HTMLElement | null;
-              if (!node) return;
-              if (node.tagName !== 'DIV') {
-                node = node.parentNode as HTMLElement | null;
+      <ListItem>
+        <Autocomplete
+          fullWidth
+          freeSolo
+          multiple
+          disableCloseOnSelect
+          options={pluginsInWiki}
+          value={excludedPlugins}
+          limitTags={2}
+          renderOption={(props, option, { selected }) => (
+            <li {...props}>
+              <Checkbox
+                icon={uncheckedIcon}
+                checkedIcon={checkedIcon}
+                style={{ marginRight: 8 }}
+                checked={selected}
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                  if (event.target.checked) {
+                    workspaceSetter({ ...workspace, excludedPlugins: [...excludedPlugins.filter(item => item !== option), option] }, true);
+                  } else {
+                    workspaceSetter({ ...workspace, excludedPlugins: excludedPlugins.filter(item => item !== option) }, true);
+                  }
+                }}
+              />
+              {option}
+            </li>
+          )}
+          slotProps={{
+            chip: {
+              onDelete: (event: Event) => {
+                // Be defensive: event.target can be null and EventTarget doesn't have DOM properties in TS.
+                const target = event.target as HTMLElement | null;
+                if (!target) return;
+                let node = target.parentNode as HTMLElement | null;
                 if (!node) return;
-              }
+                if (node.tagName !== 'DIV') {
+                  node = node.parentNode as HTMLElement | null;
+                  if (!node) return;
+                }
 
-              const value = node.innerText;
-              workspaceSetter({ ...workspace, excludedPlugins: excludedPlugins.filter(item => item !== value) }, true);
+                const value = node.innerText;
+                workspaceSetter({ ...workspace, excludedPlugins: excludedPlugins.filter(item => item !== value) }, true);
+              },
             },
-          },
-        }}
-        filterOptions={(options, parameters) => {
-          const filtered = autocompleteExcludedPluginsFilter(options, parameters);
+          }}
+          filterOptions={(options, parameters) => {
+            const filtered = autocompleteExcludedPluginsFilter(options, parameters);
 
-          if (parameters.inputValue !== '') {
-            filtered.push(parameters.inputValue);
-          }
+            if (parameters.inputValue !== '') {
+              filtered.push(parameters.inputValue);
+            }
 
-          return filtered;
-        }}
-        groupBy={(option) => option.split('/')[2]}
-        renderInput={(parameters: AutocompleteRenderInputParams) => (
-          <TextField {...parameters} label={t('EditWorkspace.AddExcludedPlugins')} helperText={t('EditWorkspace.AddExcludedPluginsDescription')} />
-        )}
-      />
+            return filtered;
+          }}
+          groupBy={(option) => option.split('/')[2]}
+          renderInput={(parameters: AutocompleteRenderInputParams) => (
+            <TextField {...parameters} label={t('EditWorkspace.AddExcludedPlugins')} helperText={t('EditWorkspace.AddExcludedPluginsDescription')} />
+          )}
+        />
+      </ListItem>
     </>
   );
 }

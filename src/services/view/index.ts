@@ -72,7 +72,15 @@ export class View implements IViewService {
 
   public getView(workspaceID: string, windowName: WindowNames): WebContentsView | undefined {
     let view = this.views.get(workspaceID)?.get(windowName);
-    if (view) return view;
+    if (view) {
+      // Stale entry from a window that was destroyed (e.g. close-handler race in older builds).
+      // Remove it so callers know to recreate the view rather than reusing a dead one.
+      if (view.webContents.isDestroyed()) {
+        this.views.get(workspaceID)?.delete(windowName);
+        return undefined;
+      }
+      return view;
+    }
 
     // Case-insensitive fallback — indicates a casing bug elsewhere, but keeps things working
     const lower = workspaceID.toLowerCase();
@@ -80,6 +88,10 @@ export class View implements IViewService {
       if (id.toLowerCase() === lower) {
         view = windowViews.get(windowName);
         if (view) {
+          if (view.webContents.isDestroyed()) {
+            windowViews.delete(windowName);
+            continue;
+          }
           logger[process.env.NODE_ENV === 'development' ? 'warn' : 'debug'](
             'getView: case-insensitive match — workspace ID casing inconsistency',
             { requestedId: workspaceID, actualId: id, windowName },
@@ -207,11 +219,23 @@ export class View implements IViewService {
       this.moveOffscreen(view, browserWindow);
     }
 
-    // Wire debounced resize handler, store cleanup function
-    const key = `${workspace.id}-${windowName}`;
+    this.bindResizeHandler(workspace.id, windowName, browserWindow, view);
+
+    return view;
+  }
+
+  private bindResizeHandler(
+    workspaceID: string,
+    windowName: WindowNames,
+    browserWindow: BrowserWindow,
+    view: WebContentsView,
+  ): void {
+    const key = `${workspaceID}-${windowName}`;
+    this.resizeCleanups.get(key)?.();
+
     const debouncedResize = debounce(async () => {
       if (browserWindow.isDestroyed()) return;
-      const ws = await this.workspaceService.get(workspace.id);
+      const ws = await this.workspaceService.get(workspaceID);
       if (ws === undefined) return;
       // Skip resize for hidden (non-active) main-window views
       if (windowName === WindowNames.main && !ws.active) return;
@@ -219,6 +243,8 @@ export class View implements IViewService {
       if (this.customBoundsMap.has(key)) return;
 
       const contentSize = browserWindow.getContentSize();
+      // Window is minimized on Windows — getContentSize() returns [0,0]. Skip to avoid wiping view bounds.
+      if (contentSize[0] === 0 && contentSize[1] === 0) return;
       view.setBounds(await getViewBounds(contentSize as [number, number], { windowName }));
     }, 200);
 
@@ -226,8 +252,6 @@ export class View implements IViewService {
     this.resizeCleanups.set(key, () => {
       browserWindow.removeListener('resize', debouncedResize);
     });
-
-    return view;
   }
 
   public async initializeViewHandlersAndLoad(
@@ -297,8 +321,12 @@ export class View implements IViewService {
   // ── Visibility (offscreen-bounds only) ────────────────────
 
   private moveOffscreen(view: WebContentsView, browserWindow: BrowserWindow): void {
+    // When the window is minimized on Windows, getContentSize returns [0,0].
+    // Fall back to a non-zero size so the view is placed safely offscreen and not at origin with 0 size.
     const [w, h] = browserWindow.getContentSize();
-    view.setBounds({ x: -w, y: -h, width: w, height: h });
+    const safeW = w > 0 ? w : 1200;
+    const safeH = h > 0 ? h : 800;
+    view.setBounds({ x: -safeW, y: -safeH, width: safeW, height: safeH });
   }
 
   /**
@@ -321,14 +349,24 @@ export class View implements IViewService {
     const key = `${workspaceID}-${windowName}`;
     this.customBoundsMap.delete(key);
     this.activelyShownViews.add(key);
-    // Ensure it's a child (idempotent in Electron)
+    // Ensure it's a child and brought to the front. Removing and re-adding forces
+    // Electron to properly render the view, preventing blank screen bugs when
+    // restoring a window from minimized/hidden state.
+    try {
+      browserWindow.contentView.removeChildView(view);
+    } catch { /* ignore if not attached */ }
     try {
       browserWindow.contentView.addChildView(view);
     } catch { /* already added */ }
+    // If the BrowserWindow was recreated, the resize listener is still bound to the
+    // old BrowserWindow instance. Rebind it here so dragging/resizing the restored
+    // window keeps the view filling the window.
+    this.bindResizeHandler(workspaceID, windowName, browserWindow, view);
     const contentSize = browserWindow.getContentSize();
     view.setBounds(await getViewBounds(contentSize as [number, number], { windowName }));
     view.webContents.focus();
     browserWindow.setTitle(view.webContents.getTitle());
+    logger.info('[test-id-VIEW_SHOWN]', { workspaceID, windowName });
   }
 
   public async hideView(workspaceID: string, windowName: WindowNames): Promise<void> {
@@ -371,6 +409,12 @@ export class View implements IViewService {
     }
   }
 
+  /**
+   * Adjust the bounds of a view that is already visible (e.g. after resize, fullscreen toggle
+   * or sidebar toggle).  This is bounds-only: it does NOT remove/re-add the view to the
+   * compositor.  The force-repaint / re-attach path lives exclusively in `showView()`, which
+   * is called whenever a view transitions from offscreen → onscreen.
+   */
   public async realignView(workspaceID: string, windowName: WindowNames): Promise<void> {
     const view = this.getView(workspaceID, windowName);
     const browserWindow = this.windowService.get(windowName);
@@ -382,6 +426,8 @@ export class View implements IViewService {
       return;
     }
     const contentSize = browserWindow.getContentSize();
+    // Window is minimized on Windows — getContentSize() returns [0,0]. Skip to avoid wiping view bounds.
+    if (contentSize[0] === 0 && contentSize[1] === 0) return;
     view.setBounds(await getViewBounds(contentSize as [number, number], { windowName }));
   }
 

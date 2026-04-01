@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { ThemeProvider } from '@mui/material/styles';
@@ -152,7 +153,7 @@ describe('ExternalAPI Component', () => {
   const renderExternalAPI = async () => {
     const result = render(
       <TestWrapper>
-        <ExternalAPI />
+        <ExternalAPI sectionRef={React.createRef()} onNeedsRestart={() => {}} />
       </TestWrapper>,
     );
 
@@ -168,7 +169,7 @@ describe('ExternalAPI Component', () => {
     // Don't await here to test the loading state
     render(
       <TestWrapper>
-        <ExternalAPI />
+        <ExternalAPI sectionRef={React.createRef()} onNeedsRestart={() => {}} />
       </TestWrapper>,
     );
     expect(screen.getByText('Loading')).toBeInTheDocument();

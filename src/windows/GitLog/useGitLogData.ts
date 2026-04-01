@@ -183,6 +183,7 @@ export function useGitLogData(workspaceID: string): IGitLogData {
         const unpushedHashesPromise = window.service.git.callGitOp(
           'getUnpushedCommitHashes',
           workspaceInfo.wikiFolderLocation,
+          workspaceInfo.gitUrl,
         );
 
         // Load files for each commit
@@ -212,11 +213,9 @@ export function useGitLogData(workspaceID: string): IGitLogData {
         }));
         void window.service.native.log('debug', '[DEBUG] entriesWithUnpushedFlag completed', { count: entriesWithUnpushedFlag.length });
 
-        // Prepare log data
         const logData = {
           commitCount: entriesWithUnpushedFlag.length,
           wikiFolderLocation: workspaceInfo.wikiFolderLocation,
-          entriesFingerprint: entriesWithUnpushedFlag.map(entry => entry.hash || 'uncommitted').join(','),
         };
 
         // Update state directly — RAF is unreliable in headless CI environments
@@ -266,7 +265,6 @@ export function useGitLogData(workspaceID: string): IGitLogData {
         void window.service.native.log('info', '[test-id-git-log-data-rendered]', {
           commitCount: entries.length,
           wikiFolderLocation: workspaceInfo.wikiFolderLocation,
-          entriesFingerprint,
         });
       }
     }
@@ -317,6 +315,7 @@ export function useGitLogData(workspaceID: string): IGitLogData {
       const unpushedHashesPromise = window.service.git.callGitOp(
         'getUnpushedCommitHashes',
         workspaceInfo.wikiFolderLocation,
+        workspaceInfo.gitUrl,
       );
 
       // Load files for each commit

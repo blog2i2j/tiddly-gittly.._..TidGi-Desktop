@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { ThemeProvider } from '@mui/material/styles';
@@ -134,7 +135,7 @@ describe('TidGiMiniWindow Component', () => {
   const renderComponent = async () => {
     const result = render(
       <TestWrapper>
-        <TidGiMiniWindow />
+        <TidGiMiniWindow sectionRef={React.createRef()} onNeedsRestart={() => {}} />
       </TestWrapper>,
     );
 
@@ -164,7 +165,7 @@ describe('TidGiMiniWindow Component', () => {
 
       const { unmount } = render(
         <TestWrapper>
-          <TidGiMiniWindow />
+          <TidGiMiniWindow sectionRef={React.createRef()} onNeedsRestart={() => {}} />
         </TestWrapper>,
       );
 
@@ -623,7 +624,7 @@ describe('TidGiMiniWindow Component', () => {
 
       render(
         <TestWrapper>
-          <TidGiMiniWindow />
+          <TidGiMiniWindow sectionRef={React.createRef()} onNeedsRestart={() => {}} />
         </TestWrapper>,
       );
 

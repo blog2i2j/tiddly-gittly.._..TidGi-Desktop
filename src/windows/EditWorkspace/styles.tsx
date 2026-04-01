@@ -1,42 +1,18 @@
-import { Accordion, AccordionSummary, Paper } from '@mui/material';
-import { Button as ButtonRaw, TextField as TextFieldRaw, Typography } from '@mui/material';
+import { Button as ButtonRaw } from '@mui/material';
 import { css, styled } from '@mui/material/styles';
-import React, { ReactNode } from 'react';
+import React from 'react';
 
-export const OptionsAccordion = styled((props: React.ComponentProps<typeof Accordion>) => <Accordion {...props} />)`
-  box-shadow: unset;
-  background-color: unset;
-`;
+import { PageRoot } from '../Preferences/PreferenceComponents';
 
-export const OptionsAccordionSummary = styled((props: React.ComponentProps<typeof AccordionSummary>) => <AccordionSummary {...props} />)`
-  padding: 0;
-  flex-direction: row-reverse;
-`;
-
-export const Root = styled((props: React.ComponentProps<typeof Paper>) => <Paper {...props} />)`
-  height: 100%;
-  width: 100%;
-  padding: 20px;
+/** Same as Preferences Root — the outermost scrollable container */
+export const Outter = styled(PageRoot)`
   /** for SaveCancelButtonsContainer 's height */
   margin-bottom: 40px;
-  display: flex;
-  flex-direction: column;
-  background: ${({ theme }) => theme.palette.background.paper};
-`;
-
-export const FlexGrow = styled('div')`
-  flex: 1;
 `;
 
 export const Button = styled((props: React.ComponentProps<typeof ButtonRaw>) => <ButtonRaw {...props} />)`
   float: right;
   margin-left: 10px;
-`;
-
-export const TextField = styled((props: React.ComponentProps<typeof TextFieldRaw>) => (
-  <TextFieldRaw fullWidth margin='dense' size='small' variant='filled' slotProps={{ inputLabel: { shrink: true } }} {...props} />
-))`
-  margin-bottom: 10px;
 `;
 
 export const AvatarFlex = styled('div')`
@@ -105,7 +81,3 @@ export const AvatarPicture = styled('img')`
 `;
 
 export const PictureButton = styled((props: React.ComponentProps<typeof ButtonRaw>) => <ButtonRaw variant='outlined' size='small' {...props} />)``;
-
-export const _Caption = styled((props: { children?: ReactNode } & React.ComponentProps<typeof Typography>) => <Typography variant='caption' {...props} />)`
-  display: block;
-`;

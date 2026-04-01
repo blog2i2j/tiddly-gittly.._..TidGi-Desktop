@@ -173,13 +173,11 @@ export class Window implements IWindowService {
         }
         if (!isTest) {
           // Don't bring up window when running e2e test, otherwise it will annoy the developer who is doing other things.
+          // show() emits the 'show' event which is handled by registerBrowserViewWindowListeners:
+          //   'show' → refreshActiveWorkspaceView() (showView: remove+add+setBounds+focus, then buildMenu)
+          // No explicit call needed here; calling it twice would create a concurrent race
+          // between two removeChildView+addChildView sequences on the same view.
           existedWindow.show();
-        }
-        // Realign workspace view when reopening window to ensure browser view is properly positioned
-        // This fixes issue #626: white screen after hiding and reopening window
-        const WindowWithBrowserView = [WindowNames.main, WindowNames.tidgiMiniWindow];
-        if (WindowWithBrowserView.includes(windowName)) {
-          await container.get<IWorkspaceViewService>(serviceIdentifier.WorkspaceView).realignActiveWorkspace();
         }
         if (returnWindow === true) {
           return existedWindow;
@@ -283,6 +281,24 @@ export class Window implements IWindowService {
       }
     }
     windowWithBrowserViewState?.manage(newWindow);
+    if (isWindowWithBrowserView) {
+      const activeWorkspace = await container.get<IWorkspaceService>(serviceIdentifier.Workspace).getActiveWorkspace();
+      const viewService = container.get<IViewService>(serviceIdentifier.View);
+      const workspaceViewService = container.get<IWorkspaceViewService>(serviceIdentifier.WorkspaceView);
+      // If a window with BrowserViews is being recreated while the app keeps running
+      // (for example, main window closed while tidgi mini window keeps the app alive),
+      // existing WebContentsView instances still live in ViewService and must be attached
+      // to the new BrowserWindow immediately. Otherwise the window comes back blank until
+      // the user manually switches workspace.
+      if (activeWorkspace !== undefined && viewService.getView(activeWorkspace.id, windowName) !== undefined) {
+        logger.info('open: restoring existing view into recreated window', {
+          function: 'Window.open',
+          windowName,
+          workspaceID: activeWorkspace.id,
+        });
+        await workspaceViewService.refreshActiveWorkspaceView();
+      }
+    }
     if (returnWindow === true) {
       return newWindow;
     }
@@ -303,6 +319,10 @@ export class Window implements IWindowService {
 
   public async getWindowMeta<N extends WindowNames>(windowName: N): Promise<WindowMeta[N] | undefined> {
     return this.windowMeta[windowName] as WindowMeta[N];
+  }
+
+  public getWindowMetaSync<N extends WindowNames>(windowName: N): WindowMeta[N] | undefined {
+    return this.windowMeta[windowName] as WindowMeta[N] | undefined;
   }
 
   /**

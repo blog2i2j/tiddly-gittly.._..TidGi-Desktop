@@ -1,26 +1,24 @@
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { AccordionDetails, Autocomplete, AutocompleteRenderInputParams, Button, List, ListItem, ListItemText, MenuItem, Switch, Tooltip, Typography } from '@mui/material';
-import React, { useEffect, useState } from 'react';
+import { Autocomplete, AutocompleteRenderInputParams, Button, List, MenuItem, Switch, TextField } from '@mui/material';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { ListItem, ListItemText } from '@/components/ListItem';
 import { usePromiseValue } from '@/helpers/useServiceValue';
+import type { ICustomSectionProps } from '@services/preferences/definitions/types';
 import { WindowNames } from '@services/windows/WindowProperties';
 import type { IWikiWorkspace } from '@services/workspaces/interface';
 import { isWikiWorkspace } from '@services/workspaces/interface';
 import { useAvailableTags } from '../AddWorkspace/useAvailableTags';
-import { OptionsAccordion, OptionsAccordionSummary, TextField } from './styles';
+import { Paper, SectionTitle } from '../Preferences/PreferenceComponents';
+import { useWorkspaceForm } from './WorkspaceFormContext';
 
-interface SubWorkspaceRoutingProps {
-  workspace: IWikiWorkspace;
-  workspaceSetter: (newValue: IWikiWorkspace, requestSaveAndRestart?: boolean) => void;
-  showDetails: boolean;
-}
-
-export function SubWorkspaceRouting(props: SubWorkspaceRoutingProps): React.JSX.Element {
+export function SubWorkspaceRouting(props: ICustomSectionProps): React.JSX.Element {
   const { t } = useTranslation();
-  const { workspace, workspaceSetter, showDetails } = props;
+  const { sectionRef } = props;
+  const { workspace: rawWorkspace, workspaceSetter: rawSetter } = useWorkspaceForm();
+  const workspace = rawWorkspace;
+  const workspaceSetter = rawSetter as (ws: IWikiWorkspace, needsRestart?: boolean) => void;
   const [tagInputValue, setTagInputValue] = useState<string>('');
-  const [accordionExpanded, setAccordionExpanded] = useState(false);
 
   const {
     isSubWiki,
@@ -59,30 +57,14 @@ export function SubWorkspaceRouting(props: SubWorkspaceRoutingProps): React.JSX.
     (candidate) => candidate.id === workspace.mainWikiID || candidate.wikiFolderLocation === workspace.mainWikiToLink,
   );
 
-  // Auto-expand when there's relevant content to show (bound sub-wikis or sub-wiki is editing its own settings)
-  useEffect(() => {
-    if (showDetails && (isSubWiki || boundSubWorkspaces.length > 0)) {
-      setAccordionExpanded(true);
-    }
-  }, [showDetails, isSubWiki, boundSubWorkspaces.length]);
-
+  // Auto-show section ref when there's relevant content (same logic used to expand accordion before)
   const availableTags = useAvailableTags(workspace.mainWikiID ?? undefined, true);
   return (
-    <OptionsAccordion
-      expanded={accordionExpanded}
-      onChange={(_, expanded) => {
-        setAccordionExpanded(expanded);
-      }}
-    >
-      <Tooltip title={t('EditWorkspace.ClickToExpand')}>
-        <OptionsAccordionSummary expandIcon={<ExpandMoreIcon />} data-testid='preference-section-subWorkspaceOptions'>
-          {t('AddWorkspace.SubWorkspaceOptions')}
-        </OptionsAccordionSummary>
-      </Tooltip>
-      <AccordionDetails>
-        <List disablePadding>
+    <>
+      <SectionTitle ref={sectionRef}>{t('AddWorkspace.SubWorkspaceOptions')}</SectionTitle>
+      <Paper elevation={0}>
+        <List dense disablePadding>
           <ListItem
-            disableGutters
             secondaryAction={
               <Switch
                 edge='end'
@@ -100,49 +82,44 @@ export function SubWorkspaceRouting(props: SubWorkspaceRoutingProps): React.JSX.
               secondary={t('EditWorkspace.IsSubWorkspaceDescription')}
             />
           </ListItem>
-        </List>
-        {showDetails && (
-          <>
-            {!isSubWiki && boundSubWorkspaces.length > 0 && (
-              <>
-                <Typography variant='subtitle2' sx={{ mt: 1, mb: 0.5 }}>
-                  {t('EditWorkspace.BoundSubWorkspacesTitle')}
-                </Typography>
-                <Typography variant='body2' color='textSecondary' sx={{ mb: 1 }}>
-                  {t('EditWorkspace.BoundSubWorkspacesDescription')}
-                </Typography>
-                <List sx={{ mb: 2 }}>
-                  {boundSubWorkspaces.map((subWorkspace) => (
-                    <ListItem
-                      key={subWorkspace.id}
-                      disableGutters
-                      data-testid='bound-sub-workspace-row'
-                      secondaryAction={
-                        <Button
-                          data-testid='open-sub-workspace-settings-button'
-                          size='small'
-                          variant='outlined'
-                          onClick={() => {
-                            void window.service.window.open(WindowNames.editWorkspace, { workspaceID: subWorkspace.id }, { multiple: true });
-                          }}
-                        >
-                          {t('EditWorkspace.OpenSubWorkspaceSettings')}
-                        </Button>
-                      }
+          {!isSubWiki && boundSubWorkspaces.length > 0 && (
+            <>
+              <ListItem>
+                <ListItemText
+                  primary={t('EditWorkspace.BoundSubWorkspacesTitle')}
+                  secondary={t('EditWorkspace.BoundSubWorkspacesDescription')}
+                />
+              </ListItem>
+              {boundSubWorkspaces.map((subWorkspace) => (
+                <ListItem
+                  key={subWorkspace.id}
+                  data-testid='bound-sub-workspace-row'
+                  secondaryAction={
+                    <Button
+                      data-testid='open-sub-workspace-settings-button'
+                      size='small'
+                      variant='outlined'
+                      onClick={() => {
+                        void window.service.window.open(WindowNames.editWorkspace, { workspaceID: subWorkspace.id }, { multiple: true });
+                      }}
                     >
-                      <ListItemText
-                        sx={{ pr: 14 }}
-                        primary={subWorkspace.name}
-                        secondary={subWorkspace.tagNames.length > 0
-                          ? `${t('EditWorkspace.SubWorkspaceTagBindings')}: ${subWorkspace.tagNames.join(', ')}`
-                          : t('EditWorkspace.SubWorkspaceNoTagBindings')}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              </>
-            )}
-            {isSubWiki && (
+                      {t('EditWorkspace.OpenSubWorkspaceSettings')}
+                    </Button>
+                  }
+                >
+                  <ListItemText
+                    sx={{ pr: 14 }}
+                    primary={subWorkspace.name}
+                    secondary={subWorkspace.tagNames.length > 0
+                      ? `${t('EditWorkspace.SubWorkspaceTagBindings')}: ${subWorkspace.tagNames.join(', ')}`
+                      : t('EditWorkspace.SubWorkspaceNoTagBindings')}
+                  />
+                </ListItem>
+              ))}
+            </>
+          )}
+          {isSubWiki && (
+            <ListItem>
               <TextField
                 select
                 data-testid='main-wiki-select'
@@ -160,7 +137,6 @@ export function SubWorkspaceRouting(props: SubWorkspaceRoutingProps): React.JSX.
                     mainWikiToLink: nextMainWorkspace?.wikiFolderLocation ?? null,
                   }, true);
                 }}
-                sx={{ mb: 2 }}
               >
                 {mainWorkspaceList.map((candidate) => (
                   <MenuItem key={candidate.id} value={candidate.id}>
@@ -168,13 +144,18 @@ export function SubWorkspaceRouting(props: SubWorkspaceRoutingProps): React.JSX.
                   </MenuItem>
                 ))}
               </TextField>
-            )}
-            <Typography variant='body2' color='textSecondary' sx={{ mt: 1, mb: 2 }}>
-              {isSubWiki ? t('AddWorkspace.SubWorkspaceOptionsDescriptionForSub') : t('AddWorkspace.SubWorkspaceOptionsDescriptionForMain')}
-            </Typography>
+            </ListItem>
+          )}
+          <ListItem>
+            <ListItemText
+              secondary={isSubWiki ? t('AddWorkspace.SubWorkspaceOptionsDescriptionForSub') : t('AddWorkspace.SubWorkspaceOptionsDescriptionForMain')}
+            />
+          </ListItem>
+          <ListItem>
             <Autocomplete
               multiple
               freeSolo
+              fullWidth
               options={availableTags}
               value={tagNames}
               onInputChange={(_event: React.SyntheticEvent, newInputValue: string) => {
@@ -198,64 +179,61 @@ export function SubWorkspaceRouting(props: SubWorkspaceRoutingProps): React.JSX.
                 />
               )}
             />
-            <List>
-              <ListItem
-                disableGutters
-                secondaryAction={
-                  <Switch
-                    edge='end'
-                    color='primary'
-                    checked={includeTagTree}
-                    data-testid='include-tag-tree-switch'
-                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-                      workspaceSetter({ ...workspace, includeTagTree: event.target.checked }, true);
-                    }}
-                  />
-                }
-              >
-                <ListItemText
-                  primary={t('AddWorkspace.IncludeTagTree')}
-                  secondary={isSubWiki ? t('AddWorkspace.IncludeTagTreeHelp') : t('AddWorkspace.IncludeTagTreeHelpForMain')}
-                />
-              </ListItem>
-              <ListItem
-                disableGutters
-                secondaryAction={
-                  <Switch
-                    edge='end'
-                    color='primary'
-                    checked={fileSystemPathFilterEnable}
-                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-                      workspaceSetter({ ...workspace, fileSystemPathFilterEnable: event.target.checked }, true);
-                    }}
-                  />
-                }
-              >
-                <ListItemText
-                  primary={t('AddWorkspace.UseFilter')}
-                  secondary={t('AddWorkspace.UseFilterHelp')}
-                />
-              </ListItem>
-              <ListItem
-                disableGutters
-                secondaryAction={
-                  <Switch
-                    edge='end'
-                    color='primary'
-                    checked={ignoreSymlinks}
-                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-                      workspaceSetter({ ...workspace, ignoreSymlinks: event.target.checked }, true);
-                    }}
-                  />
-                }
-              >
-                <ListItemText
-                  primary={t('EditWorkspace.IgnoreSymlinks')}
-                  secondary={t('EditWorkspace.IgnoreSymlinksDescription')}
-                />
-              </ListItem>
-            </List>
-            {fileSystemPathFilterEnable && (
+          </ListItem>
+          <ListItem
+            secondaryAction={
+              <Switch
+                edge='end'
+                color='primary'
+                checked={includeTagTree}
+                data-testid='include-tag-tree-switch'
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                  workspaceSetter({ ...workspace, includeTagTree: event.target.checked }, true);
+                }}
+              />
+            }
+          >
+            <ListItemText
+              primary={t('AddWorkspace.IncludeTagTree')}
+              secondary={isSubWiki ? t('AddWorkspace.IncludeTagTreeHelp') : t('AddWorkspace.IncludeTagTreeHelpForMain')}
+            />
+          </ListItem>
+          <ListItem
+            secondaryAction={
+              <Switch
+                edge='end'
+                color='primary'
+                checked={fileSystemPathFilterEnable}
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                  workspaceSetter({ ...workspace, fileSystemPathFilterEnable: event.target.checked }, true);
+                }}
+              />
+            }
+          >
+            <ListItemText
+              primary={t('AddWorkspace.UseFilter')}
+              secondary={t('AddWorkspace.UseFilterHelp')}
+            />
+          </ListItem>
+          <ListItem
+            secondaryAction={
+              <Switch
+                edge='end'
+                color='primary'
+                checked={ignoreSymlinks}
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                  workspaceSetter({ ...workspace, ignoreSymlinks: event.target.checked }, true);
+                }}
+              />
+            }
+          >
+            <ListItemText
+              primary={t('EditWorkspace.IgnoreSymlinks')}
+              secondary={t('EditWorkspace.IgnoreSymlinksDescription')}
+            />
+          </ListItem>
+          {fileSystemPathFilterEnable && (
+            <ListItem>
               <TextField
                 fullWidth
                 multiline
@@ -267,12 +245,11 @@ export function SubWorkspaceRouting(props: SubWorkspaceRoutingProps): React.JSX.
                 }}
                 label={t('AddWorkspace.FilterExpression')}
                 helperText={t('AddWorkspace.FilterExpressionHelp')}
-                sx={{ mb: 2 }}
               />
-            )}
-          </>
-        )}
-      </AccordionDetails>
-    </OptionsAccordion>
+            </ListItem>
+          )}
+        </List>
+      </Paper>
+    </>
   );
 }

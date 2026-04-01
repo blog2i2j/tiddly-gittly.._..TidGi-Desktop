@@ -23,7 +23,7 @@ import { WindowNames } from '@services/windows/WindowProperties';
 import { isWikiWorkspace, type IWorkspace } from '@services/workspaces/interface';
 import * as gitOperations from './gitOperations';
 import type { GitWorker } from './gitWorker';
-import type { ICommitAndSyncConfigs, IForcePullConfigs, IGitLogMessage, IGitService, IGitStateChange, IGitUserInfos } from './interface';
+import type { ICommitAndSyncConfigs, IForcePullConfigs, IGitLogMessage, IGitService, IGitStateChange, IGitSyncProgressEvent, IGitUserInfos } from './interface';
 import { registerMenu } from './registerMenu';
 import { getErrorMessageI18NDict, translateMessage } from './translateMessage';
 
@@ -32,6 +32,7 @@ export class Git implements IGitService {
   private gitWorker?: GitWorker;
   private nativeWorker?: Worker;
   public gitStateChange$ = new BehaviorSubject<IGitStateChange | undefined>(undefined);
+  public gitSyncProgress$ = new BehaviorSubject<IGitSyncProgressEvent | undefined>(undefined);
 
   constructor(
     @inject(serviceIdentifier.Preference) private readonly preferenceService: IPreferenceService,
@@ -174,6 +175,19 @@ export class Git implements IGitService {
         return;
       }
       const { message, meta, level } = messageObject;
+      if (
+        typeof meta === 'object' &&
+        meta !== null &&
+        'handler' in meta &&
+        (meta as { handler?: string }).handler === WikiChannel.syncProgress &&
+        'id' in meta &&
+        typeof (meta as { id?: unknown }).id === 'string'
+      ) {
+        this.gitSyncProgress$.next({
+          workspaceID: (meta as { id: string }).id,
+          message: translateMessage(message),
+        });
+      }
       if (typeof meta === 'object' && meta !== null && 'step' in meta) {
         this.popGitErrorNotificationToUser((meta as { step: GitStep }).step, message);
       }
@@ -228,21 +242,22 @@ export class Git implements IGitService {
   }
 
   public async commitAndSync(workspace: IWorkspace, configs: ICommitAndSyncConfigs): Promise<boolean> {
-    // For commit-only operations (local workspace), we don't need network
-    // Only check network for sync operations
-    if (!configs.commitOnly && !net.isOnline()) {
-      // If not online and trying to sync, will not have any change
-      return false;
-    }
+    // Note: we no longer pre-check net.isOnline() here because it can return false even when
+    // the user IS online (e.g. VPN, certain firewall configs, Electron quirks). The underlying
+    // git operations will fail naturally with a user-visible error notification if there
+    // really is no network, so the silent early-return was causing "sync has no reaction" bugs.
     if (!isWikiWorkspace(workspace)) {
       return false;
     }
     const workspaceIDToShowNotification = workspace.isSubWiki ? workspace.mainWikiID! : workspace.id;
     try {
-      try {
-        await this.updateGitInfoTiddler(workspace, configs.remoteUrl, configs.userInfo?.branch);
-      } catch (error: unknown) {
-        logger.error('updateGitInfoTiddler failed when commitAndSync', { error });
+      // Sub-wikis don't have their own wiki worker, so wikiOperationInServer would hang forever
+      if (!workspace.isSubWiki) {
+        try {
+          await this.updateGitInfoTiddler(workspace, configs.remoteUrl, configs.userInfo?.branch);
+        } catch (error: unknown) {
+          logger.error('updateGitInfoTiddler failed when commitAndSync', { error });
+        }
       }
 
       // Generate AI commit message if not provided and settings allow
@@ -283,9 +298,8 @@ export class Git implements IGitService {
   }
 
   public async forcePull(workspace: IWorkspace, configs: IForcePullConfigs): Promise<boolean> {
-    if (!net.isOnline()) {
-      return false;
-    }
+    // Same reasoning as commitAndSync: let the underlying git operation surface a real error
+    // rather than silently swallowing it when net.isOnline() gives a false negative.
     if (!isWikiWorkspace(workspace)) {
       return false;
     }
@@ -310,6 +324,7 @@ export class Git implements IGitService {
     // return the `hasChanges` result.
     return await new Promise<boolean>((resolve, reject) => {
       if (!observable) {
+        logger.warn('gitWorker.commitAndSyncWiki returned undefined - gitWorker may not be initialized', { wikiFolderPath });
         resolve(false);
         return;
       }

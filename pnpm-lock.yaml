@@ -120,8 +120,8 @@ importers:
         specifier: ^4.0.0
         version: 4.0.0
       electron-ipc-cat:
-        specifier: 2.2.3
-        version: 2.2.3(electron@39.2.3)(rxjs@7.8.2)
+        specifier: 2.4.0
+        version: 2.4.0(electron@39.2.3)(rxjs@7.8.2)
       electron-settings:
         specifier: 5.0.0
         version: 5.0.0(electron@39.2.3)
@@ -3919,6 +3919,12 @@ packages:
 
   electron-ipc-cat@2.2.3:
     resolution: {integrity: sha512-IbOiQtlu8umssyl8Gu54XHVmdQJQkv7HqMTKWNfLCMEAFFxoL74NxVLB5rI/5QIeZkIfccBAxtIA2GqJLEwZGw==}
+    peerDependencies:
+      electron: '>= 13.0.0'
+      rxjs: '>= 7.5.0'
+
+  electron-ipc-cat@2.4.0:
+    resolution: {integrity: sha512-6WxnnDhp6zGPDbIXNuSvucmPOeA5dCWlBO0hvUIo80szvo0o3SXjgW9ihttLZGRROSvJWLHZqQ5zflh/wPK36g==}
     peerDependencies:
       electron: '>= 13.0.0'
       rxjs: '>= 7.5.0'
@@ -11872,6 +11878,13 @@ snapshots:
     optional: true
 
   electron-ipc-cat@2.2.3(electron@39.2.3)(rxjs@7.8.2):
+    dependencies:
+      electron: 39.2.3
+      memize: 2.1.1
+      rxjs: 7.8.2
+      serialize-error: 12.0.0
+
+  electron-ipc-cat@2.4.0(electron@39.2.3)(rxjs@7.8.2):
     dependencies:
       electron: 39.2.3
       memize: 2.1.1
