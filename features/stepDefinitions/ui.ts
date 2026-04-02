@@ -44,11 +44,13 @@ When('I wait for the page to load completely', async function(this: ApplicationW
     this.currentWindow = currentWindow;
   }
   await currentWindow?.waitForLoadState('domcontentloaded', { timeout: PLAYWRIGHT_TIMEOUT });
-  // Some startup pages keep background activity and never reach networkidle quickly.
+  // Short networkidle gives workspace-creation and other startup IPC time to finish
+  // without blocking on long-lived connections. 3s is intentionally different from
+  // PLAYWRIGHT_TIMEOUT — this is just a grace period, not a hard requirement.
   try {
-    await currentWindow?.waitForLoadState('networkidle', { timeout: PLAYWRIGHT_SHORT_TIMEOUT });
+    await currentWindow?.waitForLoadState('networkidle', { timeout: 3000 });
   } catch {
-    // Ignore networkidle timeout when DOM is already ready.
+    // Ignore – DOM is already ready.
   }
 });
 
@@ -149,36 +151,40 @@ Then('I should not see {string} elements with selectors:', async function(this: 
 
   const rows = dataTable.raw();
   const dataRows = parseDataTableRows(rows, 2);
-  const errors: string[] = [];
 
   if (dataRows[0]?.length !== 2) {
     throw new Error('Table must have exactly 2 columns: | element description | selector |');
   }
 
-  // Check all elements
-  for (const [elementComment, selector] of dataRows) {
-    try {
-      const element = currentWindow.locator(selector).first();
-      const count = await element.count();
-      if (count > 0) {
-        const isVisible = await element.isVisible();
-        if (isVisible) {
-          errors.push(`Element "${elementComment}" with selector "${selector}" should not be visible but was found`);
+  // Retry to allow UI time to update after state changes
+  await backOff(
+    async () => {
+      const errors: string[] = [];
+      for (const [elementComment, selector] of dataRows) {
+        try {
+          const element = currentWindow.locator(selector).first();
+          const count = await element.count();
+          if (count > 0) {
+            const isVisible = await element.isVisible();
+            if (isVisible) {
+              errors.push(`Element "${elementComment}" with selector "${selector}" should not be visible but was found`);
+            }
+          }
+        } catch {
+          // Element not found is expected
         }
       }
-      // Element not found or not visible - this is expected
-    } catch (error) {
-      // If the error is our custom error, rethrow it
-      if (error instanceof Error && error.message.includes('should not be visible')) {
-        errors.push(error.message);
+      if (errors.length > 0) {
+        throw new Error(`Failed to verify elements are not visible:\n${errors.join('\n')}`);
       }
-      // Otherwise, element not found is expected - continue
-    }
-  }
-
-  if (errors.length > 0) {
-    throw new Error(`Failed to verify elements are not visible:\n${errors.join('\n')}`);
-  }
+    },
+    {
+      numOfAttempts: 10,
+      startingDelay: 300,
+      timeMultiple: 1,
+      maxDelay: 300,
+    },
+  );
 });
 
 When('I click on a(n) {string} element with selector {string}', async function(this: ApplicationWorld, elementComment: string, selector: string) {
